@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Firebase Family Tree - Admin Protected Editable</title>
+  <title>Admin Protected Editable Family Tree with Firebase</title>
   <style>
     body {
       font-family: "Segoe UI", sans-serif;
@@ -146,13 +146,14 @@
     }
   </style>
 
-  <!-- Firebase SDK -->
-  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js"></script>
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
 </head>
 <body>
 
-<h2>🌳 এডমিন প্রটেক্টেড ফ্যামিলি ট্রি (Firebase)</h2>
+<h2>🌳 এডমিন প্রটেক্টেড ফ্যামিলি ট্রি (Firebase সংযুক্ত)</h2>
 
 <!-- Login Form -->
 <div id="loginSection">
@@ -181,30 +182,26 @@
 
 <!-- Family Tree -->
 <ul class="family-tree generation-0" id="familyTree" style="margin-top: 40px;">
-  <li class="member" data-generation="0">
-    <div class="member-name">ওমেদ আলী <button class="edit-btn" style="display:none;">Edit</button></div>
-    <ul class="generation-1"></ul>
-  </li>
+  <!-- ট্রি ডাইনামিকলি লোড হবে -->
 </ul>
 
 <script>
-  const ADMIN_PASSWORD = "admin123";
-  let isAdmin = false;
-
-  // Firebase config and init
+  // Firebase Config and Initialization
   const firebaseConfig = {
     apiKey: "AIzaSyC0Q9ay_ACVrsYx--8vUUbUR19m4SW78ck",
     authDomain: "family-tree-project-dccdd.firebaseapp.com",
     projectId: "family-tree-project-dccdd",
-    storageBucket: "family-tree-project-dccdd.firebasestorage.app",
+    storageBucket: "family-tree-project-dccdd.appspot.com",
     messagingSenderId: "623594594547",
     appId: "1:623594594547:web:db620880a1555a4ed61786",
     measurementId: "G-P5PT2WY16D"
   };
-
-  // Initialize Firebase app and Firestore
-  const app = firebase.initializeApp(firebaseConfig);
+  firebase.initializeApp(firebaseConfig);
   const db = firebase.firestore();
+
+  const ADMIN_PASSWORD = "admin123";
+  let isAdmin = false;
+  let members = []; // পুরো ফ্যামিলি ট্রির ডাটা
 
   // Toggle child UL on member-name click (only if NOT editing input)
   function setupToggle() {
@@ -221,85 +218,108 @@
     });
   }
 
-  // Gather members for select dropdown
-  function gatherMembers(ul, list = []) {
-    ul.querySelectorAll(':scope > li.member').forEach(li => {
-      const name = li.querySelector('.member-name').childNodes[0].textContent.trim();
-      const gen = li.dataset.generation;
-      list.push({ name, gen, element: li });
-      const childUl = li.querySelector('ul');
-      if (childUl) gatherMembers(childUl, list);
-    });
-    return list;
-  }
-
   // Update parent select dropdown options
   function updateParentSelect() {
     const parentSelect = document.getElementById('parentSelect');
     parentSelect.innerHTML = '';
-    const members = gatherMembers(document.getElementById('familyTree'));
     members.forEach(m => {
       const option = document.createElement('option');
-      option.value = m.name;
-      option.textContent = `${m.name} (Generation ${m.gen})`;
+      option.value = m.id;
+      option.textContent = `${m.name} (Generation ${m.generation})`;
       parentSelect.appendChild(option);
     });
   }
 
-  // Add new member function (also save to Firestore)
-  async function addMember(parentName, childName, skipSave = false) {
-    const members = gatherMembers(document.getElementById('familyTree'));
-    const parent = members.find(m => m.name === parentName);
-    if (!parent) return false;
+  // Build tree from data
+  function buildTreeFromData(members) {
+    const container = document.getElementById('familyTree');
+    container.innerHTML = '';
+    const rootMembers = members.filter(m => m.parentId === null);
+    rootMembers.forEach(root => {
+      const rootLi = createMemberLi(root, members);
+      container.appendChild(rootLi);
+    });
+    setupToggle();
+    setupEditButtons();
+    updateParentSelect();
+  }
 
-    const newLi = document.createElement('li');
-    newLi.classList.add('member');
-    const newGen = parseInt(parent.gen) + 1;
-    newLi.dataset.generation = newGen;
-    newLi.style.paddingLeft = '36px';
+  function createMemberLi(member, allMembers) {
+    const li = document.createElement('li');
+    li.classList.add('member');
+    li.dataset.generation = member.generation;
+    const div = document.createElement('div');
+    div.className = `member-name generation-${member.generation}`;
+    div.textContent = member.name + ' ';
 
-    const memberDiv = document.createElement('div');
-    memberDiv.classList.add('member-name', `generation-${newGen}`);
-    memberDiv.textContent = childName + ' ';
-
-    // Add Edit button (only visible in admin mode)
     const editBtn = document.createElement('button');
     editBtn.textContent = 'Edit';
     editBtn.classList.add('edit-btn');
     editBtn.style.display = isAdmin ? 'inline-block' : 'none';
-    memberDiv.appendChild(editBtn);
+    div.appendChild(editBtn);
 
-    newLi.appendChild(memberDiv);
+    li.appendChild(div);
 
-    let childUl = parent.element.querySelector('ul');
-    if (!childUl) {
-      childUl = document.createElement('ul');
-      childUl.classList.add(`generation-${newGen}`);
-      parent.element.appendChild(childUl);
-      childUl.classList.add('show');
-    } else {
-      childUl.classList.add('show');
+    const children = allMembers.filter(m => m.parentId === member.id);
+    if (children.length > 0) {
+      const ul = document.createElement('ul');
+      ul.classList.add(`generation-${member.generation + 1}`, 'show');
+      children.forEach(child => {
+        ul.appendChild(createMemberLi(child, allMembers));
+      });
+      li.appendChild(ul);
     }
-    childUl.appendChild(newLi);
+    return li;
+  }
 
-    setupToggle();
-    setupEditButtons();
-    updateParentSelect();
-
-    // Save to Firestore unless loading from Firestore (skipSave = true)
-    if (!skipSave) {
-      try {
-        await db.collection("family_tree").add({
-          parent: parentName,
-          name: childName,
-          generation: newGen,
-          timestamp: firebase.firestore.FieldValue.serverTimestamp()
-        });
-      } catch (err) {
-        console.error("Error saving to Firestore:", err);
+  // Load family tree from Firestore
+  async function loadFamilyTree() {
+    try {
+      const snapshot = await db.collection('familyTree').doc('main').get();
+      if (!snapshot.exists) {
+        // No data yet, initialize with default root member
+        members = [{
+          id: 'root',
+          name: 'ওমেদ আলী',
+          parentId: null,
+          generation: 0
+        }];
+        await saveFamilyTree();
+      } else {
+        const data = snapshot.data();
+        members = data.members || [];
       }
+      buildTreeFromData(members);
+    } catch (error) {
+      console.error('Error loading family tree:', error);
     }
+  }
 
+  // Save family tree to Firestore
+  async function saveFamilyTree() {
+    try {
+      await db.collection('familyTree').doc('main').set({ members });
+    } catch (error) {
+      console.error('Error saving family tree:', error);
+    }
+  }
+
+  // Add member function (updates data and Firestore)
+  async function addMember(parentId, childName) {
+    const parent = members.find(m => m.id === parentId);
+    if (!parent) return false;
+
+    const newId = 'id-' + Date.now();
+    const newMember = {
+      id: newId,
+      name: childName,
+      parentId: parent.id,
+      generation: parent.generation + 1
+    };
+
+    members.push(newMember);
+    await saveFamilyTree();
+    buildTreeFromData(members);
     return true;
   }
 
@@ -310,42 +330,32 @@
         e.stopPropagation();
         const memberDiv = btn.parentElement;
         const liMember = memberDiv.parentElement;
+        const memberGen = liMember.dataset.generation;
 
-        // If input already open, ignore
         if (memberDiv.querySelector('input.edit-input')) return;
 
         const oldName = memberDiv.childNodes[0].textContent.trim();
 
-        // Create input box for editing
         const input = document.createElement('input');
         input.type = 'text';
         input.value = oldName;
         input.classList.add('edit-input');
         memberDiv.insertBefore(input, btn);
-        // Hide old text node
         memberDiv.childNodes[0].textContent = '';
 
         input.focus();
 
-        // Save changes on blur or Enter
-        async function save() {
+        // Save on blur or Enter
+        function save() {
           const newName = input.value.trim();
           if (newName) {
-            memberDiv.childNodes[0].textContent = newName + ' ';
-
-            // Update Firestore
-            try {
-              const snapshot = await db.collection("family_tree").where("name", "==", oldName).get();
-              snapshot.forEach(doc => {
-                doc.ref.update({ name: newName });
-              });
-            } catch (err) {
-              console.error("Firestore update error:", err);
+            // Update member in members array
+            const member = members.find(m => m.name === oldName && m.generation == memberGen);
+            if (member) {
+              member.name = newName;
+              saveFamilyTree();
+              buildTreeFromData(members);
             }
-
-            updateParentSelect();
-          } else {
-            memberDiv.childNodes[0].textContent = oldName + ' ';
           }
           input.remove();
         }
@@ -387,9 +397,9 @@
     const loginMsg = document.getElementById('loginMessage');
     if (pw === ADMIN_PASSWORD) {
       isAdmin = true;
+      updateUI();
       updateParentSelect();
       setupEditButtons();
-      updateUI();
       loginMsg.textContent = '';
     } else {
       loginMsg.textContent = 'পাসওয়ার্ড ভুল হয়েছে!';
@@ -404,10 +414,10 @@
   });
 
   // Add member form submit
-  document.getElementById('addMemberForm').addEventListener('submit', e => {
+  document.getElementById('addMemberForm').addEventListener('submit', async e => {
     e.preventDefault();
     if (!isAdmin) return;
-    const parentName = document.getElementById('parentSelect').value.trim();
+    const parentId = document.getElementById('parentSelect').value;
     const childName = document.getElementById('childName').value.trim();
     const msg = document.getElementById('message');
     if (!childName) {
@@ -415,56 +425,25 @@
       msg.textContent = 'নতুন সদস্যের নাম দিন।';
       return;
     }
-    if (!parentName) {
+    if (!parentId) {
       msg.style.color = 'red';
       msg.textContent = 'পিতার নাম নির্বাচন করুন।';
       return;
     }
-    addMember(parentName, childName).then(success => {
-      if (success) {
-        msg.style.color = 'green';
-        msg.textContent = `'${childName}' সফলভাবে '${parentName}' এর সন্তান হিসেবে যুক্ত হয়েছে।`;
-        document.getElementById('childName').value = '';
-      } else {
-        msg.style.color = 'red';
-        msg.textContent = 'কোনো সমস্যা হয়েছে, আবার চেষ্টা করুন।';
-      }
-    });
+    const success = await addMember(parentId, childName);
+    if (success) {
+      msg.style.color = 'green';
+      msg.textContent = `'${childName}' সফলভাবে যুক্ত হয়েছে।`;
+      document.getElementById('childName').value = '';
+    } else {
+      msg.style.color = 'red';
+      msg.textContent = 'কোনো সমস্যা হয়েছে, আবার চেষ্টা করুন।';
+    }
   });
 
-  // Load family tree from Firestore on page load
-  async function loadTreeFromFirestore() {
-    try {
-      const snapshot = await db.collection("family_tree").orderBy("timestamp").get();
-      if (snapshot.empty) return;
-
-      // Clear all except root member children
-      const root = document.querySelector('#familyTree > li.member');
-      root.querySelector('ul').innerHTML = '';
-
-      // We'll keep track of added members to avoid duplicates
-      const addedMembers = new Set();
-
-      snapshot.docs.forEach(doc => {
-        const data = doc.data();
-        // Skip if already added
-        const key = data.parent + "->" + data.name;
-        if (!addedMembers.has(key)) {
-          addMember(data.parent, data.name, true);
-          addedMembers.add(key);
-        }
-      });
-
-    } catch (err) {
-      console.error("Error loading Firestore data:", err);
-    }
-  }
-
-  // Initialize UI and toggle
-  setupToggle();
+  // Initial load
+  loadFamilyTree();
   updateUI();
-  loadTreeFromFirestore();
-
 </script>
 
 </body>
