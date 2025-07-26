@@ -3,12 +3,469 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Family Tree Viewer</title>
-  <link rel="stylesheet" href="tree.css" />
+  <title>Firebase Family Tree - Admin Protected Editable</title>
+  <style>
+    body {
+      font-family: "Segoe UI", sans-serif;
+      padding: 40px;
+      background: #f7f9fb;
+    }
+    h2 {
+      text-align: center;
+      color: #333;
+      margin-bottom: 30px;
+    }
+    ul.family-tree, ul.family-tree ul {
+      list-style: none;
+      padding-left: 60px;
+      position: relative;
+      margin-left: 30px;
+    }
+    ul.family-tree {
+      margin-left: 0;
+      padding-left: 0;
+    }
+    ul.family-tree ul::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 16px;
+      bottom: 0;
+      width: 2px;
+      background: #bbb;
+    }
+    li.member {
+      margin: 20px 0;
+      position: relative;
+      padding-left: 36px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+    li.member::before {
+      content: "";
+      position: absolute;
+      top: 20px;
+      left: 0;
+      width: 20px;
+      height: 2px;
+      background: #bbb;
+    }
+    .member-name {
+      padding: 10px 16px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      display: inline-block;
+      user-select: none;
+      transition: all 0.3s ease;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+      font-weight: bold;
+    }
+    .member-name:hover {
+      transform: scale(1.05);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    ul.family-tree ul {
+      display: none;
+    }
+    ul.family-tree ul.show {
+      display: block;
+    }
+    /* Generation colors */
+    .generation-0 .member-name { background: #ffe6e6; border-color: #ff9999; color: #a80000; }
+    .generation-1 .member-name { background: #e6f2ff; border-color: #3399ff; color: #004d99; }
+    .generation-2 .member-name { background: #e6ffe6; border-color: #66cc66; color: #267326; }
+    .generation-3 .member-name { background: #fff5cc; border-color: #ffcc66; color: #a66b00; }
+    .generation-4 .member-name { background: #f3e6ff; border-color: #b366ff; color: #5c00b3; }
+    .generation-5 .member-name { background: #e6f7ff; border-color: #66d9ff; color: #007a99; }
+    .generation-6 .member-name { background: #fff0f5; border-color: #ff99cc; color: #b30059; }
+    .generation-7 .member-name { background: #f9fbe7; border-color: #d4e157; color: #827717; }
+    .generation-8 .member-name { background: #ede7f6; border-color: #9575cd; color: #512da8; }
+    .generation-9 .member-name { background: #e0f2f1; border-color: #4db6ac; color: #004d40; }
+
+    /* Form and UI */
+    #loginForm, #adminPanel {
+      max-width: 400px;
+      margin: 20px auto;
+      padding: 20px;
+      background: white;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+      border-radius: 8px;
+    }
+    #loginForm label, #adminPanel label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: 600;
+      color: #333;
+    }
+    #loginForm input[type="password"],
+    #adminPanel input[type="text"],
+    #adminPanel select {
+      width: 100%;
+      padding: 8px 10px;
+      margin-bottom: 16px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      font-size: 16px;
+    }
+    button {
+      padding: 10px 18px;
+      font-size: 16px;
+      background: #3399ff;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.3s ease;
+    }
+    button:hover {
+      background: #1a73e8;
+    }
+    #message, #loginMessage {
+      text-align: center;
+      margin-top: 10px;
+      font-weight: 600;
+    }
+    #message { color: green; }
+    #loginMessage { color: red; }
+    .edit-btn {
+      margin-left: 10px;
+      padding: 3px 7px;
+      font-size: 12px;
+      background: #ffcc00;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .edit-input {
+      font-size: 16px;
+      padding: 6px 8px;
+      border-radius: 6px;
+      border: 1px solid #aaa;
+      width: auto;
+      min-width: 150px;
+    }
+  </style>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js"></script>
 </head>
 <body>
-  <h2>🌳 ফ্যামিলি ট্রি</h2>
-  <div id="tree-container">Loading tree...</div>
-  <script type="module" src="app.js"></script>
+
+<h2>🌳 এডমিন প্রটেক্টেড ফ্যামিলি ট্রি (Firebase)</h2>
+
+<!-- Login Form -->
+<div id="loginSection">
+  <form id="loginForm">
+    <label for="passwordInput">এডমিন পাসওয়ার্ড দিন:</label>
+    <input type="password" id="passwordInput" placeholder="পাসওয়ার্ড" required />
+    <button type="submit">লগইন</button>
+    <div id="loginMessage"></div>
+  </form>
+</div>
+
+<!-- Admin Panel: Add & Edit -->
+<div id="adminPanel" style="display:none;">
+  <form id="addMemberForm">
+    <label for="parentSelect">পিতার নাম নির্বাচন করুন:</label>
+    <select id="parentSelect" required></select>
+
+    <label for="childName">নতুন সন্তানের নাম লিখুন:</label>
+    <input type="text" id="childName" placeholder="নতুন সদস্যের নাম" required />
+
+    <button type="submit">Add Member</button>
+    <div id="message"></div>
+  </form>
+  <button id="logoutBtn" style="margin-top:10px; background:#f44336;">লগআউট</button>
+</div>
+
+<!-- Family Tree -->
+<ul class="family-tree generation-0" id="familyTree" style="margin-top: 40px;">
+  <li class="member" data-generation="0">
+    <div class="member-name">ওমেদ আলী <button class="edit-btn" style="display:none;">Edit</button></div>
+    <ul class="generation-1"></ul>
+  </li>
+</ul>
+
+<script>
+  const ADMIN_PASSWORD = "admin123";
+  let isAdmin = false;
+
+  // Firebase config and init
+  const firebaseConfig = {
+    apiKey: "AIzaSyC0Q9ay_ACVrsYx--8vUUbUR19m4SW78ck",
+    authDomain: "family-tree-project-dccdd.firebaseapp.com",
+    projectId: "family-tree-project-dccdd",
+    storageBucket: "family-tree-project-dccdd.firebasestorage.app",
+    messagingSenderId: "623594594547",
+    appId: "1:623594594547:web:db620880a1555a4ed61786",
+    measurementId: "G-P5PT2WY16D"
+  };
+
+  // Initialize Firebase app and Firestore
+  const app = firebase.initializeApp(firebaseConfig);
+  const db = firebase.firestore();
+
+  // Toggle child UL on member-name click (only if NOT editing input)
+  function setupToggle() {
+    document.querySelectorAll('.member-name').forEach(member => {
+      member.onclick = (e) => {
+        if (e.target.classList.contains('edit-input')) return;
+        if (e.target.tagName === 'BUTTON') return;
+        const childrenUl = member.parentElement.querySelector('ul');
+        if (childrenUl) {
+          childrenUl.classList.toggle('show');
+        }
+        e.stopPropagation();
+      };
+    });
+  }
+
+  // Gather members for select dropdown
+  function gatherMembers(ul, list = []) {
+    ul.querySelectorAll(':scope > li.member').forEach(li => {
+      const name = li.querySelector('.member-name').childNodes[0].textContent.trim();
+      const gen = li.dataset.generation;
+      list.push({ name, gen, element: li });
+      const childUl = li.querySelector('ul');
+      if (childUl) gatherMembers(childUl, list);
+    });
+    return list;
+  }
+
+  // Update parent select dropdown options
+  function updateParentSelect() {
+    const parentSelect = document.getElementById('parentSelect');
+    parentSelect.innerHTML = '';
+    const members = gatherMembers(document.getElementById('familyTree'));
+    members.forEach(m => {
+      const option = document.createElement('option');
+      option.value = m.name;
+      option.textContent = `${m.name} (Generation ${m.gen})`;
+      parentSelect.appendChild(option);
+    });
+  }
+
+  // Add new member function (also save to Firestore)
+  async function addMember(parentName, childName, skipSave = false) {
+    const members = gatherMembers(document.getElementById('familyTree'));
+    const parent = members.find(m => m.name === parentName);
+    if (!parent) return false;
+
+    const newLi = document.createElement('li');
+    newLi.classList.add('member');
+    const newGen = parseInt(parent.gen) + 1;
+    newLi.dataset.generation = newGen;
+    newLi.style.paddingLeft = '36px';
+
+    const memberDiv = document.createElement('div');
+    memberDiv.classList.add('member-name', `generation-${newGen}`);
+    memberDiv.textContent = childName + ' ';
+
+    // Add Edit button (only visible in admin mode)
+    const editBtn = document.createElement('button');
+    editBtn.textContent = 'Edit';
+    editBtn.classList.add('edit-btn');
+    editBtn.style.display = isAdmin ? 'inline-block' : 'none';
+    memberDiv.appendChild(editBtn);
+
+    newLi.appendChild(memberDiv);
+
+    let childUl = parent.element.querySelector('ul');
+    if (!childUl) {
+      childUl = document.createElement('ul');
+      childUl.classList.add(`generation-${newGen}`);
+      parent.element.appendChild(childUl);
+      childUl.classList.add('show');
+    } else {
+      childUl.classList.add('show');
+    }
+    childUl.appendChild(newLi);
+
+    setupToggle();
+    setupEditButtons();
+    updateParentSelect();
+
+    // Save to Firestore unless loading from Firestore (skipSave = true)
+    if (!skipSave) {
+      try {
+        await db.collection("family_tree").add({
+          parent: parentName,
+          name: childName,
+          generation: newGen,
+          timestamp: firebase.firestore.FieldValue.serverTimestamp()
+        });
+      } catch (err) {
+        console.error("Error saving to Firestore:", err);
+      }
+    }
+
+    return true;
+  }
+
+  // Setup Edit button click handlers
+  function setupEditButtons() {
+    document.querySelectorAll('.edit-btn').forEach(btn => {
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        const memberDiv = btn.parentElement;
+        const liMember = memberDiv.parentElement;
+
+        // If input already open, ignore
+        if (memberDiv.querySelector('input.edit-input')) return;
+
+        const oldName = memberDiv.childNodes[0].textContent.trim();
+
+        // Create input box for editing
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.value = oldName;
+        input.classList.add('edit-input');
+        memberDiv.insertBefore(input, btn);
+        // Hide old text node
+        memberDiv.childNodes[0].textContent = '';
+
+        input.focus();
+
+        // Save changes on blur or Enter
+        async function save() {
+          const newName = input.value.trim();
+          if (newName) {
+            memberDiv.childNodes[0].textContent = newName + ' ';
+
+            // Update Firestore
+            try {
+              const snapshot = await db.collection("family_tree").where("name", "==", oldName).get();
+              snapshot.forEach(doc => {
+                doc.ref.update({ name: newName });
+              });
+            } catch (err) {
+              console.error("Firestore update error:", err);
+            }
+
+            updateParentSelect();
+          } else {
+            memberDiv.childNodes[0].textContent = oldName + ' ';
+          }
+          input.remove();
+        }
+
+        input.onblur = save;
+        input.onkeydown = (ev) => {
+          if (ev.key === 'Enter') {
+            input.blur();
+          } else if (ev.key === 'Escape') {
+            input.value = oldName;
+            input.blur();
+          }
+        };
+      };
+    });
+  }
+
+  // Show/hide admin UI based on login state
+  function updateUI() {
+    const loginSection = document.getElementById('loginSection');
+    const adminPanel = document.getElementById('adminPanel');
+    const allEditButtons = document.querySelectorAll('.edit-btn');
+
+    if (isAdmin) {
+      loginSection.style.display = 'none';
+      adminPanel.style.display = 'block';
+      allEditButtons.forEach(btn => btn.style.display = 'inline-block');
+    } else {
+      loginSection.style.display = 'block';
+      adminPanel.style.display = 'none';
+      allEditButtons.forEach(btn => btn.style.display = 'none');
+    }
+  }
+
+  // Handle login
+  document.getElementById('loginForm').addEventListener('submit', e => {
+    e.preventDefault();
+    const pw = document.getElementById('passwordInput').value;
+    const loginMsg = document.getElementById('loginMessage');
+    if (pw === ADMIN_PASSWORD) {
+      isAdmin = true;
+      updateParentSelect();
+      setupEditButtons();
+      updateUI();
+      loginMsg.textContent = '';
+    } else {
+      loginMsg.textContent = 'পাসওয়ার্ড ভুল হয়েছে!';
+    }
+    document.getElementById('passwordInput').value = '';
+  });
+
+  // Handle logout
+  document.getElementById('logoutBtn').addEventListener('click', () => {
+    isAdmin = false;
+    updateUI();
+  });
+
+  // Add member form submit
+  document.getElementById('addMemberForm').addEventListener('submit', e => {
+    e.preventDefault();
+    if (!isAdmin) return;
+    const parentName = document.getElementById('parentSelect').value.trim();
+    const childName = document.getElementById('childName').value.trim();
+    const msg = document.getElementById('message');
+    if (!childName) {
+      msg.style.color = 'red';
+      msg.textContent = 'নতুন সদস্যের নাম দিন।';
+      return;
+    }
+    if (!parentName) {
+      msg.style.color = 'red';
+      msg.textContent = 'পিতার নাম নির্বাচন করুন।';
+      return;
+    }
+    addMember(parentName, childName).then(success => {
+      if (success) {
+        msg.style.color = 'green';
+        msg.textContent = `'${childName}' সফলভাবে '${parentName}' এর সন্তান হিসেবে যুক্ত হয়েছে।`;
+        document.getElementById('childName').value = '';
+      } else {
+        msg.style.color = 'red';
+        msg.textContent = 'কোনো সমস্যা হয়েছে, আবার চেষ্টা করুন।';
+      }
+    });
+  });
+
+  // Load family tree from Firestore on page load
+  async function loadTreeFromFirestore() {
+    try {
+      const snapshot = await db.collection("family_tree").orderBy("timestamp").get();
+      if (snapshot.empty) return;
+
+      // Clear all except root member children
+      const root = document.querySelector('#familyTree > li.member');
+      root.querySelector('ul').innerHTML = '';
+
+      // We'll keep track of added members to avoid duplicates
+      const addedMembers = new Set();
+
+      snapshot.docs.forEach(doc => {
+        const data = doc.data();
+        // Skip if already added
+        const key = data.parent + "->" + data.name;
+        if (!addedMembers.has(key)) {
+          addMember(data.parent, data.name, true);
+          addedMembers.add(key);
+        }
+      });
+
+    } catch (err) {
+      console.error("Error loading Firestore data:", err);
+    }
+  }
+
+  // Initialize UI and toggle
+  setupToggle();
+  updateUI();
+  loadTreeFromFirestore();
+
+</script>
+
 </body>
 </html>
