@@ -82,22 +82,22 @@
     .generation-8 .member-name { background: #ede7f6; border-color: #9575cd; color: #512da8; }
     .generation-9 .member-name { background: #e0f2f1; border-color: #4db6ac; color: #004d40; }
 
-    /* Form and UI */
-    #loginForm, #adminPanel {
+    /* Admin Panel Form */
+    #adminPanel {
       max-width: 400px;
       margin: 20px auto;
       padding: 20px;
       background: white;
       box-shadow: 0 4px 10px rgba(0,0,0,0.1);
       border-radius: 8px;
+      display: none;
     }
-    #loginForm label, #adminPanel label {
+    #adminPanel label {
       display: block;
       margin-bottom: 8px;
       font-weight: 600;
       color: #333;
     }
-    #loginForm input[type="password"],
     #adminPanel input[type="text"],
     #adminPanel select {
       width: 100%;
@@ -107,26 +107,15 @@
       border-radius: 6px;
       font-size: 16px;
     }
-    button {
-      padding: 10px 18px;
-      font-size: 16px;
-      background: #3399ff;
-      color: white;
-      border: none;
-      border-radius: 6px;
-      cursor: pointer;
-      transition: background 0.3s ease;
-    }
-    button:hover {
-      background: #1a73e8;
-    }
-    #message, #loginMessage {
+    #message {
       text-align: center;
       margin-top: 10px;
       font-weight: 600;
+      color: green;
     }
-    #message { color: green; }
-    #loginMessage { color: red; }
+    #message.error {
+      color: red;
+    }
     .edit-btn {
       margin-left: 10px;
       padding: 3px 7px;
@@ -135,6 +124,7 @@
       border: none;
       border-radius: 4px;
       cursor: pointer;
+      display: none;
     }
     .edit-input {
       font-size: 16px;
@@ -143,6 +133,63 @@
       border: 1px solid #aaa;
       width: auto;
       min-width: 150px;
+    }
+
+    /* Fixed top right login/logout panel */
+    #topRightLoginPanel {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      background: #f7f9fb;
+      padding: 10px 15px;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      z-index: 1000;
+      width: 260px;
+    }
+    #topRightLoginPanel form {
+      margin: 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    #topRightLoginPanel input[type="password"] {
+      padding: 6px 8px;
+      font-size: 14px;
+      border-radius: 4px;
+      border: 1px solid #ccc;
+      flex: 1;
+    }
+    #topRightLoginPanel button {
+      padding: 6px 10px;
+      font-size: 14px;
+      cursor: pointer;
+      border-radius: 4px;
+      border: none;
+      background: #3399ff;
+      color: white;
+      transition: background 0.3s ease;
+    }
+    #topRightLoginPanel button:hover {
+      background: #1a73e8;
+    }
+    #logoutBtn {
+      display: none;
+      margin-top: 8px;
+      width: 100%;
+      background: #f44336;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      padding: 6px 0;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    #loginMessage {
+      color: red;
+      margin-top: 5px;
+      font-size: 13px;
+      height: 18px;
     }
   </style>
 
@@ -153,20 +200,20 @@
 </head>
 <body>
 
-<h2>🌳 এডমিন প্রটেক্টেড ফ্যামিলি ট্রি (Firebase সংযুক্ত)</h2>
+<h2>🌳 ফ্যামিলি ট্রি </h2>
 
-<!-- Login Form -->
-<div id="loginSection">
+<!-- Top Right Login Panel -->
+<div id="topRightLoginPanel">
   <form id="loginForm">
-    <label for="passwordInput">এডমিন পাসওয়ার্ড দিন:</label>
     <input type="password" id="passwordInput" placeholder="পাসওয়ার্ড" required />
     <button type="submit">লগইন</button>
-    <div id="loginMessage"></div>
   </form>
+  <button id="logoutBtn">লগআউট</button>
+  <div id="loginMessage"></div>
 </div>
 
 <!-- Admin Panel: Add & Edit -->
-<div id="adminPanel" style="display:none;">
+<div id="adminPanel">
   <form id="addMemberForm">
     <label for="parentSelect">পিতার নাম নির্বাচন করুন:</label>
     <select id="parentSelect" required></select>
@@ -177,12 +224,11 @@
     <button type="submit">Add Member</button>
     <div id="message"></div>
   </form>
-  <button id="logoutBtn" style="margin-top:10px; background:#f44336;">লগআউট</button>
 </div>
 
 <!-- Family Tree -->
 <ul class="family-tree generation-0" id="familyTree" style="margin-top: 40px;">
-  <!-- ট্রি ডাইনামিকলি লোড হবে -->
+  <!-- Tree will be loaded dynamically -->
 </ul>
 
 <script>
@@ -201,16 +247,26 @@
 
   const ADMIN_PASSWORD = "admin123";
   let isAdmin = false;
-  let members = []; // পুরো ফ্যামিলি ট্রির ডাটা
+  let members = [];
 
-  // Toggle child UL on member-name click (only if NOT editing input)
+  // Toggle child UL on member-name click
   function setupToggle() {
     document.querySelectorAll('.member-name').forEach(member => {
       member.onclick = (e) => {
+        // In visitor or admin mode: Only root member shown initially
+        // So clicking toggles child list visibility
         if (e.target.classList.contains('edit-input')) return;
         if (e.target.tagName === 'BUTTON') return;
         const childrenUl = member.parentElement.querySelector('ul');
-        if (childrenUl) {
+        if (!childrenUl) return;
+
+        // If visitor mode: only allow toggle if root or if parent is visible
+        if (!isAdmin) {
+          // In visitor mode, only root visible initially, others hidden
+          // Toggle child only if parent ul is visible or root
+          childrenUl.classList.toggle('show');
+        } else {
+          // Admin mode: toggle show/hide children
           childrenUl.classList.toggle('show');
         }
         e.stopPropagation();
@@ -218,7 +274,7 @@
     });
   }
 
-  // Update parent select dropdown options
+  // Update parent select dropdown options (for admin add)
   function updateParentSelect() {
     const parentSelect = document.getElementById('parentSelect');
     parentSelect.innerHTML = '';
@@ -230,24 +286,35 @@
     });
   }
 
-  // Build tree from data
+  // Build tree recursively from data
   function buildTreeFromData(members) {
     const container = document.getElementById('familyTree');
     container.innerHTML = '';
+
+    // Find root members (parentId=null)
     const rootMembers = members.filter(m => m.parentId === null);
     rootMembers.forEach(root => {
       const rootLi = createMemberLi(root, members);
       container.appendChild(rootLi);
     });
+
     setupToggle();
     setupEditButtons();
     updateParentSelect();
+
+    // Visitor mode: only show root member UL, hide all child ULs initially
+    if (!isAdmin) {
+      container.querySelectorAll('ul').forEach(ul => {
+        ul.classList.remove('show');
+      });
+    }
   }
 
   function createMemberLi(member, allMembers) {
     const li = document.createElement('li');
     li.classList.add('member');
     li.dataset.generation = member.generation;
+
     const div = document.createElement('div');
     div.className = `member-name generation-${member.generation}`;
     div.textContent = member.name + ' ';
@@ -263,12 +330,14 @@
     const children = allMembers.filter(m => m.parentId === member.id);
     if (children.length > 0) {
       const ul = document.createElement('ul');
-      ul.classList.add(`generation-${member.generation + 1}`, 'show');
+      ul.classList.add(`generation-${member.generation + 1}`);
+      if (isAdmin) ul.classList.add('show'); // admin mode: show children by default
       children.forEach(child => {
         ul.appendChild(createMemberLi(child, allMembers));
       });
       li.appendChild(ul);
     }
+
     return li;
   }
 
@@ -277,7 +346,6 @@
     try {
       const snapshot = await db.collection('familyTree').doc('main').get();
       if (!snapshot.exists) {
-        // No data yet, initialize with default root member
         members = [{
           id: 'root',
           name: 'ওমেদ আলী',
@@ -304,7 +372,7 @@
     }
   }
 
-  // Add member function (updates data and Firestore)
+  // Add member (admin only)
   async function addMember(parentId, childName) {
     const parent = members.find(m => m.id === parentId);
     if (!parent) return false;
@@ -323,7 +391,7 @@
     return true;
   }
 
-  // Setup Edit button click handlers
+  // Setup Edit buttons for admin
   function setupEditButtons() {
     document.querySelectorAll('.edit-btn').forEach(btn => {
       btn.onclick = (e) => {
@@ -345,11 +413,10 @@
 
         input.focus();
 
-        // Save on blur or Enter
         function save() {
           const newName = input.value.trim();
           if (newName) {
-            // Update member in members array
+            // Find member by id for safe update
             const member = members.find(m => m.name === oldName && m.generation == memberGen);
             if (member) {
               member.name = newName;
@@ -362,9 +429,8 @@
 
         input.onblur = save;
         input.onkeydown = (ev) => {
-          if (ev.key === 'Enter') {
-            input.blur();
-          } else if (ev.key === 'Escape') {
+          if (ev.key === 'Enter') input.blur();
+          else if (ev.key === 'Escape') {
             input.value = oldName;
             input.blur();
           }
@@ -373,41 +439,42 @@
     });
   }
 
-  // Show/hide admin UI based on login state
+  // Update UI for login/logout and admin panel
   function updateUI() {
-    const loginSection = document.getElementById('loginSection');
+    const logoutBtn = document.getElementById('logoutBtn');
+    const loginForm = document.getElementById('loginForm');
     const adminPanel = document.getElementById('adminPanel');
-    const allEditButtons = document.querySelectorAll('.edit-btn');
 
     if (isAdmin) {
-      loginSection.style.display = 'none';
+      logoutBtn.style.display = 'block';
+      loginForm.style.display = 'none';
       adminPanel.style.display = 'block';
-      allEditButtons.forEach(btn => btn.style.display = 'inline-block');
+      document.querySelectorAll('.edit-btn').forEach(btn => btn.style.display = 'inline-block');
     } else {
-      loginSection.style.display = 'block';
+      logoutBtn.style.display = 'none';
+      loginForm.style.display = 'flex';
       adminPanel.style.display = 'none';
-      allEditButtons.forEach(btn => btn.style.display = 'none');
+      document.querySelectorAll('.edit-btn').forEach(btn => btn.style.display = 'none');
     }
+    document.getElementById('loginMessage').textContent = '';
   }
 
-  // Handle login
+  // Login form submit
   document.getElementById('loginForm').addEventListener('submit', e => {
     e.preventDefault();
     const pw = document.getElementById('passwordInput').value;
-    const loginMsg = document.getElementById('loginMessage');
     if (pw === ADMIN_PASSWORD) {
       isAdmin = true;
       updateUI();
       updateParentSelect();
       setupEditButtons();
-      loginMsg.textContent = '';
     } else {
-      loginMsg.textContent = 'পাসওয়ার্ড ভুল হয়েছে!';
+      document.getElementById('loginMessage').textContent = 'পাসওয়ার্ড ভুল হয়েছে!';
     }
     document.getElementById('passwordInput').value = '';
   });
 
-  // Handle logout
+  // Logout button
   document.getElementById('logoutBtn').addEventListener('click', () => {
     isAdmin = false;
     updateUI();
@@ -421,29 +488,30 @@
     const childName = document.getElementById('childName').value.trim();
     const msg = document.getElementById('message');
     if (!childName) {
-      msg.style.color = 'red';
+      msg.classList.add('error');
       msg.textContent = 'নতুন সদস্যের নাম দিন।';
       return;
     }
     if (!parentId) {
-      msg.style.color = 'red';
+      msg.classList.add('error');
       msg.textContent = 'পিতার নাম নির্বাচন করুন।';
       return;
     }
     const success = await addMember(parentId, childName);
     if (success) {
-      msg.style.color = 'green';
+      msg.classList.remove('error');
       msg.textContent = `'${childName}' সফলভাবে যুক্ত হয়েছে।`;
       document.getElementById('childName').value = '';
     } else {
-      msg.style.color = 'red';
+      msg.classList.add('error');
       msg.textContent = 'কোনো সমস্যা হয়েছে, আবার চেষ্টা করুন।';
     }
   });
 
   // Initial load
-  loadFamilyTree();
-  updateUI();
+  loadFamilyTree().then(() => {
+    updateUI();
+  });
 </script>
 
 </body>
