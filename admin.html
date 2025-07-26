@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Admin Panel</title>
+  <link rel="stylesheet" href="tree.css" />
+</head>
+<body>
+  <h2>🌳 এডমিন প্যানেল</h2>
+  
+  <div id="login-section">
+    <input id="admin-email" type="email" placeholder="Email" />
+    <input id="admin-password" type="password" placeholder="Password" />
+    <button onclick="adminLogin()">Login</button>
+  </div>
+
+  <div id="form-section" style="display:none;">
+    <h3>নতুন মেম্বার যুক্ত করুন</h3>
+    <input type="text" id="name" placeholder="নাম" />
+    <input type="number" id="generation" placeholder="জেনারেশন (0-9)" />
+    <input type="text" id="parentId" placeholder="Parent Member ID" />
+    <button onclick="addMember()">Add Member</button>
+    <br><br>
+    <button onclick="logout()">Logout</button>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
